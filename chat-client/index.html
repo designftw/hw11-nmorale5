@@ -38,6 +38,10 @@
       <!-- End Problem 1 Solution -->
 
       <p>
+        <avatar :actor="$gf.me" :editable="true"></avatar>
+      </p>
+
+      <p>
         <!-- We display names in multiple places, so we made a -->
         <!-- reusable <name></name> component. -->
         <!-- See below for the template. -->
@@ -100,6 +104,9 @@
               Message: {{ message.content }} 
             </li>
             <li>
+              From Avatar: <avatar :actor="message.actor"></avatar>
+            </li>
+            <li>
               From Name: <name :actor="message.actor"></name>
             </li>
             <li>
@@ -156,7 +163,15 @@
             </template>
 
             <li>
+              <reply :messageid="message.id"></reply>
+            </li>
+
+            <li>
               <like :messageid="message.id"></like>
+            </li>
+
+            <li>
+              <read :messageid="message.id" :actor="message.actor"></read>
             </li>
           </ul>
         </li>
@@ -191,5 +206,51 @@
     </button>
     # of likes:  {{ numLikes }}
   </template>
+
+  <template id="read">
+    <details>
+      <summary>Read by {{ numReads }} users</summary>
+      <ul>
+        <li v-for="name of readNames" :key="name">
+          {{ name }}
+          <!-- <name :actor=""></name> -->
+        </li>
+      </ul>
+    </details> 
+  </template>
+
+  <template id="reply">
+    Replies:
+
+    <ul>
+      <li v-for="reply of replies">
+        {{ reply.content }}
+      </li>
+    </ul>
+
+    <span v-if="!editing">
+
+      <!-- Also if the name is "editable" add an edit button -->
+      <button @click="editReply">
+        Reply
+      </button>
+    </span>
+
+    <!-- If we're in the editing state, create something to edit the name-->
+    <form v-else @submit.prevent="postReply">
+      <input v-model="editText"/>
+      <input type="submit" value="Send"/>
+    </form>
+  </template>
+
+  <template id="avatar">
+    <span v-if="editable">
+      <!-- If we're in the editing state, create something to edit the name-->
+      <input type="file" accept="image/*" @change="onImageAttachment"/>
+    </span>
+
+    <img v-else :src="getUrl()" />
+  </template>
+
 </body>
 </html>

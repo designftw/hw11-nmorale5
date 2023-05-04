@@ -323,7 +323,174 @@ const Like = {
   template: '#like'
 }
 
-app.components = { Name, Like }
+const Read = {
+  props: ["messageid", "actor"],
+
+  setup(props) {
+    const $gf = Vue.inject('graffiti')
+    const { messageid, actor } = Vue.toRefs(props)
+    const { objects: readsRaw } = $gf.useObjects([messageid]);
+    const { objects } = $gf.useObjects([actor]);
+    return { readsRaw, objects }
+  },
+
+  mounted() {
+    this.markRead();
+  },
+
+  computed: {
+    reads() {
+      return this.readsRaw.filter(l=>
+        l.type == 'Read' &&
+        l.object == this.messageid)
+    },
+
+    numReads() {
+      // Unique number of actors
+      return [...new Set(this.reads.map(l=>l.actor))].length
+    },
+
+    myReads() {
+      return this.reads.filter(l=> l.actor == this.$gf.me)
+    },
+
+    readNames() {
+      // const profiles = this.objects.filter(l => l.type === "Profile")
+      return [...new Set(this.reads.map(l=>l.actor))]
+    }
+  },
+
+  methods: {
+    markRead() {
+      if ( ! this.myReads.length) {
+        this.$gf.post({
+          type: 'Read',
+          object: this.messageid,
+          context: [this.messageid]
+        })
+      }
+    }
+  },
+
+  template: '#read'
+}
+
+const Reply = {
+  props: ["messageid"],
+
+  setup(props) {
+    const $gf = Vue.inject('graffiti')
+    const messageid = Vue.toRef(props, 'messageid')
+    const { objects: repliesRaw } = $gf.useObjects([messageid])
+    return { repliesRaw }
+  },
+
+  data() {
+    return {
+      editing: false,
+      editText: ''
+    }
+  },
+
+  computed: {
+    replies() {
+      return this.repliesRaw.filter(l=>
+        l.type == 'Note' &&
+        l.inReplyTo == this.messageid)
+    },
+  },
+
+  methods: {
+    editReply() {
+      this.editing = true
+      this.editText = ''
+    },
+
+    postReply() {
+      this.$gf.post({
+        type: 'Note',
+        content: this.editText,
+        inReplyTo: this.messageid,
+        context: [this.messageid]
+      })
+
+      // Exit the editing state
+      this.editing = false
+    }
+  },
+
+  template: '#reply'
+}
+
+const Avatar = {
+  props: ['actor', 'editable'],
+
+  setup(props) {
+    // Get a collection of all objects associated with the actor
+    const { actor } = Vue.toRefs(props)
+    const $gf = Vue.inject('graffiti')
+    return $gf.useObjects([actor])
+  },
+
+  computed: {
+    profile() {
+      return this.objects
+        // Filter the raw objects for profile data
+        // https://www.w3.org/TR/activitystreams-vocabulary/#dfn-profile
+        .filter(m=>
+          // Does the message have a type property?
+          m.type &&
+          // Is the value of that property 'Profile'?
+          m.type=='Profile' &&
+          // Does the message have a icon property?
+          m.icon &&
+          // Is that icon an image?
+          m.icon.type === "Image")
+        // Choose the most recent one or null if none exists
+        .reduce((prev, curr)=> !prev || curr.published > prev.published? curr : prev, null)
+    }
+  },
+
+  data() {
+    return {
+      imageDownloads: {}
+    }
+  },
+
+  methods: {
+    async onImageAttachment(event) {
+      const file = event.target.files[0]
+      this.$gf.post({
+        type: 'Profile',
+        icon: {
+          type: 'Image',
+          magnet: await this.$gf.media.store(file)
+        }
+      })
+    },
+
+    async getUrl() {
+      console.log(this.profile)
+      if (!(this.profile.icon.magnet in this.imageDownloads)) {
+        this.imageDownloads[this.profile.icon.magnet] = "downloading"
+        let blob
+        try {
+          blob = await this.$gf.media.fetch(this.profile.icon.magnet)
+        } catch(e) {
+          this.imageDownloads[this.profile.icon.magnet] = "error"
+          return;
+        }
+        this.imageDownloads[this.profile.icon.magnet] = URL.createObjectURL(blob)
+      }
+    }
+
+
+  },
+
+  template: '#avatar'
+}
+
+app.components = { Name, Like, Read, Reply, Avatar }
 Vue.createApp(app)
    .use(GraffitiPlugin(Vue))
    .mount('#app')
