@@ -38,14 +38,12 @@
       <!-- End Problem 1 Solution -->
 
       <p>
-        <avatar :actor="$gf.me" :editable="true"></avatar>
-      </p>
-
-      <p>
         <!-- We display names in multiple places, so we made a -->
         <!-- reusable <name></name> component. -->
         <!-- See below for the template. -->
         My Name Is: <name :actor="$gf.me" :editable="true"></name>
+        <br>
+        My Profile Picture Is: <profile-picture :actor="$gf.me" :editable="true"></profile-picture>
       </p>
 
       <p>
@@ -104,10 +102,10 @@
               Message: {{ message.content }} 
             </li>
             <li>
-              From Avatar: <avatar :actor="message.actor"></avatar>
+              From Name: <name :actor="message.actor"></name>
             </li>
             <li>
-              From Name: <name :actor="message.actor"></name>
+              Profile Picture: <profile-picture :actor="message.actor"></profile-picture>
             </li>
             <li>
               From Actor ID: {{ message.actor }}
@@ -137,14 +135,8 @@
               ID: {{ message.id }}
             </li>
 
-            <li v-if="message.attachment && message.attachment.magnet in imageDownloads">
-              <span v-if="imageDownloads[message.attachment.magnet]=='downloading'">
-                Image is downloading...
-              </span>
-              <span v-else-if="imageDownloads[message.attachment.magnet]=='error'">
-                Image could not be downloaded!
-              </span>
-              <img v-else :src="imageDownloads[message.attachment.magnet]" />
+            <li v-if="message.attachment && message.attachment.magnet">
+              <magnet-img :src="message.attachment.magnet"></magnet-img>
             </li>
 
             <!-- Only add these controls if the message is ours -->
@@ -163,15 +155,13 @@
             </template>
 
             <li>
-              <reply :messageid="message.id"></reply>
-            </li>
-
-            <li>
               <like :messageid="message.id"></like>
             </li>
-
             <li>
-              <read :messageid="message.id" :actor="message.actor"></read>
+              <replies :messageid="message.id"></replies>
+            </li>
+            <li>
+              <read-receipts :messageid="message.id"></read-receipts>
             </li>
           </ul>
         </li>
@@ -207,50 +197,34 @@
     # of likes:  {{ numLikes }}
   </template>
 
-  <template id="read">
-    <details>
-      <summary>Read by {{ numReads }} users</summary>
-      <ul>
-        <li v-for="name of readNames" :key="name">
-          {{ name }}
-          <!-- <name :actor=""></name> -->
-        </li>
-      </ul>
-    </details> 
-  </template>
+  <template id="profile-picture">
+    <magnet-img :src="profile?profile.icon.magnet:anonymous"></magnet-img>
 
-  <template id="reply">
-    Replies:
-
-    <ul>
-      <li v-for="reply of replies">
-        {{ reply.content }}
-      </li>
-    </ul>
-
-    <span v-if="!editing">
-
-      <!-- Also if the name is "editable" add an edit button -->
-      <button @click="editReply">
-        Reply
-      </button>
-    </span>
-
-    <!-- If we're in the editing state, create something to edit the name-->
-    <form v-else @submit.prevent="postReply">
-      <input v-model="editText"/>
-      <input type="submit" value="Send"/>
+    <form v-if="editable" @submit.prevent="savePicture">
+      Choose a profile Picture:
+      <input type="file" accept="image/*" @change="onPicture"/>
+      <input type="submit" value="Save"/>
     </form>
   </template>
 
-  <template id="avatar">
-    <span v-if="editable">
-      <!-- If we're in the editing state, create something to edit the name-->
-      <input type="file" accept="image/*" @change="onImageAttachment"/>
-    </span>
-
-    <img v-else :src="getUrl()" />
+  <template id="replies">
+    <form @submit.prevent="postReply">
+      <input v-model="content"/>
+      <input type="submit" value="Reply"/>
+    </form>
+    <ul>
+      <li v-for="reply in replies" :key="reply.id">
+        <name :actor="reply.actor"></name>:
+        {{ reply.content }}
+      </li>
+    </ul>
   </template>
 
+  <template id="read-receipts">
+    Read By:
+    <span v-for="actor in readActors">
+      <name :actor="actor"></name>
+    </span>
+  </template>
 </body>
 </html>

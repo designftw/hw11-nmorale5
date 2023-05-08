@@ -51,7 +51,6 @@ const app = {
       myUsername: '',
       actorsToUsernames: {},
       /////////////////////////////
-      imageDownloads: {}
     }
   },
 
@@ -72,22 +71,6 @@ const app = {
         }
       }
     },
-
-    async messagesWithAttachments(messages) {
-      for (const m of messages) {
-        if (!(m.attachment.magnet in this.imageDownloads)) {
-          this.imageDownloads[m.attachment.magnet] = "downloading"
-          let blob
-          try {
-            blob = await this.$gf.media.fetch(m.attachment.magnet)
-          } catch(e) {
-            this.imageDownloads[m.attachment.magnet] = "error"
-            continue
-          }
-          this.imageDownloads[m.attachment.magnet] = URL.createObjectURL(blob)
-        }
-      }
-    }
   },
   /////////////////////////////
 
@@ -129,13 +112,6 @@ const app = {
         // Only show the 10 most recent ones
         .slice(0,50)
     },
-
-    messagesWithAttachments() {
-      return this.messages.filter(m=>
-        m.attachment &&
-        m.attachment.type == 'Image' &&
-        typeof m.attachment.magnet == 'string')
-    }
   },
 
   methods: {
@@ -166,6 +142,7 @@ const app = {
 
       // Send!
       this.$gf.post(message)
+      this.messageText = ''
     },
 
     removeMessage(message) {
@@ -323,107 +300,56 @@ const Like = {
   template: '#like'
 }
 
-const Read = {
-  props: ["messageid", "actor"],
-
-  setup(props) {
-    const $gf = Vue.inject('graffiti')
-    const { messageid, actor } = Vue.toRefs(props)
-    const { objects: readsRaw } = $gf.useObjects([messageid]);
-    const { objects } = $gf.useObjects([actor]);
-    return { readsRaw, objects }
-  },
-
-  mounted() {
-    this.markRead();
-  },
-
-  computed: {
-    reads() {
-      return this.readsRaw.filter(l=>
-        l.type == 'Read' &&
-        l.object == this.messageid)
+const MagnetImg = {
+  props: {
+    src: String,
+    loading: {
+      type: String,
+      default: 'https://upload.wikimedia.org/wikipedia/commons/9/92/Loading_icon_cropped.gif'
     },
-
-    numReads() {
-      // Unique number of actors
-      return [...new Set(this.reads.map(l=>l.actor))].length
-    },
-
-    myReads() {
-      return this.reads.filter(l=> l.actor == this.$gf.me)
-    },
-
-    readNames() {
-      // const profiles = this.objects.filter(l => l.type === "Profile")
-      return [...new Set(this.reads.map(l=>l.actor))]
+    error: {
+      type: String,
+      default: '' // empty string will trigger broken link
     }
-  },
-
-  methods: {
-    markRead() {
-      if ( ! this.myReads.length) {
-        this.$gf.post({
-          type: 'Read',
-          object: this.messageid,
-          context: [this.messageid]
-        })
-      }
-    }
-  },
-
-  template: '#read'
-}
-
-const Reply = {
-  props: ["messageid"],
-
-  setup(props) {
-    const $gf = Vue.inject('graffiti')
-    const messageid = Vue.toRef(props, 'messageid')
-    const { objects: repliesRaw } = $gf.useObjects([messageid])
-    return { repliesRaw }
   },
 
   data() {
     return {
-      editing: false,
-      editText: ''
+      fetchedSrc: ''
     }
   },
 
-  computed: {
-    replies() {
-      return this.repliesRaw.filter(l=>
-        l.type == 'Note' &&
-        l.inReplyTo == this.messageid)
-    },
-  },
-
-  methods: {
-    editReply() {
-      this.editing = true
-      this.editText = ''
-    },
-
-    postReply() {
-      this.$gf.post({
-        type: 'Note',
-        content: this.editText,
-        inReplyTo: this.messageid,
-        context: [this.messageid]
-      })
-
-      // Exit the editing state
-      this.editing = false
+  watch: {
+    src: {
+      async handler(src) {
+        this.fetchedSrc = this.loading
+        try {
+          this.fetchedSrc = await this.$gf.media.fetchURL(src)
+        } catch {
+          this.fetchedSrc = this.error
+        }
+      },
+      immediate: true
     }
   },
 
-  template: '#reply'
+  template: '<img :src="fetchedSrc" style="max-width: 8rem" />'
 }
 
-const Avatar = {
-  props: ['actor', 'editable'],
+const ProfilePicture = {
+  props: {
+    actor: {
+      type: String
+    },
+    editable: {
+      type: Boolean,
+      default: false
+    },
+    anonymous: {
+      type: String,
+      default: 'magnet:?xt=urn:btih:58c03e56171ecbe97f865ae9327c79ab3c1d5f16&dn=Anonymous.svg&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337&tr=udp%3A%2F%2Fexplodie.org%3A6969&tr=udp%3A%2F%2Ftracker.empire-js.us%3A1337&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.openwebtorrent.com'
+    }
+  },
 
   setup(props) {
     // Get a collection of all objects associated with the actor
@@ -435,62 +361,139 @@ const Avatar = {
   computed: {
     profile() {
       return this.objects
-        // Filter the raw objects for profile data
-        // https://www.w3.org/TR/activitystreams-vocabulary/#dfn-profile
         .filter(m=>
-          // Does the message have a type property?
-          m.type &&
-          // Is the value of that property 'Profile'?
           m.type=='Profile' &&
-          // Does the message have a icon property?
           m.icon &&
-          // Is that icon an image?
-          m.icon.type === "Image")
-        // Choose the most recent one or null if none exists
+          m.icon.type == 'Image' &&
+          typeof m.icon.magnet == 'string')
         .reduce((prev, curr)=> !prev || curr.published > prev.published? curr : prev, null)
     }
   },
 
   data() {
     return {
-      imageDownloads: {}
+      file: null
     }
   },
 
   methods: {
-    async onImageAttachment(event) {
-      const file = event.target.files[0]
+    async savePicture() {
+      if (!this.file) return
+
       this.$gf.post({
         type: 'Profile',
         icon: {
           type: 'Image',
-          magnet: await this.$gf.media.store(file)
+          magnet: await this.$gf.media.store(this.file)
         }
       })
     },
 
-    async getUrl() {
-      console.log(this.profile)
-      if (!(this.profile.icon.magnet in this.imageDownloads)) {
-        this.imageDownloads[this.profile.icon.magnet] = "downloading"
-        let blob
-        try {
-          blob = await this.$gf.media.fetch(this.profile.icon.magnet)
-        } catch(e) {
-          this.imageDownloads[this.profile.icon.magnet] = "error"
-          return;
-        }
-        this.imageDownloads[this.profile.icon.magnet] = URL.createObjectURL(blob)
-      }
+    onPicture(event) {
+      const file = event.target.files[0]
+      this.file = file
     }
-
-
   },
 
-  template: '#avatar'
+  template: '#profile-picture'
 }
 
-app.components = { Name, Like, Read, Reply, Avatar }
+const Replies = {
+  props: ["messageid"],
+
+  setup(props) {
+    const $gf = Vue.inject('graffiti')
+    const messageid = Vue.toRef(props, 'messageid')
+    return $gf.useObjects([messageid])
+  },
+
+  computed: {
+    replies() {
+      return this.objects.filter(o=>
+        o.type == 'Note' &&
+        typeof o.content == 'string' &&
+        o.inReplyTo == this.messageid)
+      .sort((m1, m2)=> new Date(m2.published) - new Date(m1.published))
+    },
+  },
+
+  data() {
+    return {
+      content: ''
+    }
+  },
+
+  methods: {
+    postReply() {
+      if (!this.content) return
+
+      this.$gf.post({
+        type: 'Note',
+        content: this.content,
+        inReplyTo: this.messageid,
+        context: [this.messageid]
+      })
+      this.content = ''
+    }
+  },
+
+  template: '#replies'
+}
+
+const ReadReceipts = {
+  props: ["messageid"],
+
+  setup(props) {
+    const $gf = Vue.inject('graffiti')
+    const messageid = Vue.toRef(props, 'messageid')
+    return $gf.useObjects([messageid])
+  },
+
+  async mounted() {
+    if (!(this.readActors.includes(this.$gf.me))) {
+      this.$gf.post({
+        type: 'Read',
+        object: this.messageid,
+        context: [this.messageid]
+      })
+    }
+  },
+
+  computed: {
+    reads() {
+      return this.objects.filter(o=>
+        o.type == 'Read' &&
+        o.object == this.messageid)
+    },
+
+    myReads() {
+      return this.reads.filter(r=>r.actor==this.$gf.me)
+    },
+
+    readActors() {
+      return [...new Set(this.reads.map(r=>r.actor))]
+    }
+  },
+
+  watch: {
+    // In case we accidentally "read" more than once.
+    myReads(myReads) {
+      if (myReads.length > 1) {
+        // Remove all but one
+        this.$gf.remove(...myReads.slice(1))
+      }
+    }
+  },
+
+  template: '#read-receipts'
+}
+
 Vue.createApp(app)
+   .component('name', Name)
+   .component('like', Like)
+   .component('magnet-img', MagnetImg)
+   .component('profile-picture', ProfilePicture)
+   .component('replies', Replies)
+   .component('read-receipts', ReadReceipts)
    .use(GraffitiPlugin(Vue))
    .mount('#app')
