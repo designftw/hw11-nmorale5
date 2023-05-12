@@ -13,20 +13,26 @@ const app = {
   },
 
   setup() {
-    // Initialize the name of the channel we're chatting in
-    const channel = Vue.ref('default-demo')
+    // start in no group or channel when page initially loaded
+    const channel = Vue.ref();
+    const group = Vue.ref();
 
     // And a flag for whether or not we're private-messaging
-    const privateMessaging = Vue.ref(false)
+    // const privateMessaging = Vue.ref(false)
 
     // If we're private messaging use "me" as the channel,
     // otherwise use the channel value
     const $gf = Vue.inject('graffiti')
-    const context = Vue.computed(()=> privateMessaging.value? [$gf.me] : [channel.value])
+    const myGroups = Vue.computed(()=> [$gf.me])
+    const channelsInGroup = Vue.computed(()=> [group.value])
+    const messagesInChannel = Vue.computed(()=> [channel.value])
 
     // Initialize the collection of messages associated with the context
-    const { objects: messagesRaw } = $gf.useObjects(context)
-    return { channel, privateMessaging, messagesRaw }
+    const { objects: groupsRaw } = $gf.useObjects(myGroups)
+    const { objects: channelsRaw } = $gf.useObjects(channelsInGroup)
+    const { objects: messagesRaw } = $gf.useObjects(messagesInChannel)
+
+    return { channel, group, groupsRaw, channelsRaw, messagesRaw }
   },
 
   data() {
@@ -51,6 +57,7 @@ const app = {
       myUsername: '',
       actorsToUsernames: {},
       /////////////////////////////
+      newMemberName: '',
     }
   },
 
@@ -75,8 +82,31 @@ const app = {
   /////////////////////////////
 
   computed: {
+    groups() {
+      const allJoinedGroups = this.groupsRaw
+        .filter(g => g.type === 'Member' || g.type === 'Unmember')
+        .sort((g1, g2)=> new Date(g2.published) - new Date(g1.published));
+      const seenGroups = new Set();
+      const currentMemberGroups = [];
+      for (const group of allJoinedGroups) {
+        if ( ! seenGroups.has(group.groupid)) {
+          seenGroups.add(group.groupid);
+          if (group.type === 'Member') {
+            currentMemberGroups.push(group);
+          }
+        }
+      }
+      return currentMemberGroups;
+    },
+
+    channels() {
+      return this.group && this.channelsRaw
+        .filter(c => c.type === 'Channel')
+        .sort((g1, g2)=> new Date(g2.published) - new Date(g1.published));
+    },
+
     messages() {
-      let messages = this.messagesRaw
+      return this.channel && this.messagesRaw
         // Filter the "raw" messages for data
         // that is appropriate for our application
         // https://www.w3.org/TR/activitystreams-vocabulary/#dfn-note
@@ -90,27 +120,29 @@ const app = {
           // Is that property a string?
           typeof m.content=='string')
 
-      // Do some more filtering for private messaging
-      if (this.privateMessaging) {
-        messages = messages.filter(m=>
-          // Is the message private?
-          m.bto &&
-          // Is the message to exactly one person?
-          m.bto.length == 1 &&
-          (
-            // Is the message to the recipient?
-            m.bto[0] == this.recipient ||
-            // Or is the message from the recipient?
-            m.actor == this.recipient
-          ))
-      }
-
-      return messages
         // Sort the messages with the
         // most recently created ones first
         .sort((m1, m2)=> new Date(m2.published) - new Date(m1.published))
         // Only show the 10 most recent ones
         .slice(0,50)
+    },
+
+    members() {
+      if ( ! this.group) return;
+      const allMembersEver = this.channelsRaw // channels and members share same context
+        .filter(m => m.type === 'Member' || m.type === 'Unmember')
+        .sort((g1, g2)=> new Date(g2.published) - new Date(g1.published));
+      const seenMembers = new Set();
+      const currentMembers = [];
+      for (const member of allMembersEver) {
+        if ( ! seenMembers.has(member.userid)) {
+          seenMembers.add(member.userid);
+          if (member.type === 'Member') {
+            currentMembers.push(member);
+          }
+        }
+      }
+      return currentMembers;
     },
   },
 
@@ -119,6 +151,8 @@ const app = {
       const message = {
         type: 'Note',
         content: this.messageText,
+        channelid: this.channel,
+        context: [this.channel]
       }
 
       if (this.file) {
@@ -127,17 +161,6 @@ const app = {
           magnet: await this.$gf.media.store(this.file)
         }
         this.file = null
-      }
-
-      // The context field declares which
-      // channel(s) the object is posted in
-      // You can post in more than one if you want!
-      // The bto field makes messages private
-      if (this.privateMessaging) {
-        message.bto = [this.recipient]
-        message.context = [this.$gf.me, this.recipient]
-      } else {
-        message.context = [this.channel]
       }
 
       // Send!
@@ -187,6 +210,65 @@ const app = {
     onImageAttachment(event) {
       const file = event.target.files[0]
       this.file = file
+    },
+
+    async addMember() {
+      if ( ! this.newMemberName || ! this.group) return;
+      const actorid = await this.resolver.usernameToActor(this.newMemberName);
+      if ( ! actorid) return;
+      console.log(actorid)
+      this.$gf.post({
+        type: 'Member',
+        userid: actorid,
+        groupid: this.group,
+        context: [actorid, this.group]
+      });
+      this.newMemberName = '';
+    },
+
+    async removeMember(actorid) {
+      if ( ! this.group) return;
+      this.$gf.post({
+        type: 'Unmember',
+        userid: actorid,
+        groupid: this.group,
+        context: [actorid, this.group]
+      });
+    },
+
+    createGroup() {
+      if ( ! this.$gf.me ) return;
+      const newGroupId = crypto.randomUUID();
+      this.$gf.post({
+        type: 'Member',
+        userid: this.$gf.me,
+        groupid: newGroupId,
+        context: [this.$gf.me, newGroupId]
+      });
+      this.$gf.post({
+        type: 'GroupInfo',
+        name: 'New Group',
+        groupid: newGroupId,
+        context: [newGroupId]
+      });
+    },
+
+    createChannel() {
+      if ( ! this.group) return;
+      const newChannelId = crypto.randomUUID();
+      this.$gf.post({
+        type: 'Channel',
+        channelid: newChannelId,
+        groupid: this.group,
+        context: [this.group]
+      });
+      this.$gf.post({
+        type: 'ChannelInfo',
+        name: 'New Channel',
+        date: undefined,
+        channelid: newChannelId,
+        context: [newChannelId]
+      });
     }
   }
 }
@@ -488,6 +570,109 @@ const ReadReceipts = {
   template: '#read-receipts'
 }
 
+const Group = {
+  props: ['groupid', 'editable'],
+
+  setup(props) {
+    const $gf = Vue.inject('graffiti')
+    const groupid = Vue.toRef(props, 'groupid')
+    return $gf.useObjects([groupid])
+  },
+
+  computed: {
+    name() {
+      console.log(this.groupid)
+      return this.objects
+        .filter(g => g.type === 'GroupInfo' && g.groupid === this.groupid)
+        .sort((m1, m2)=> new Date(m2.published) - new Date(m1.published))
+        .at(0)?.name;
+    }
+  },
+
+  data() {
+    return {
+      newName: '',
+      editing: false,
+    }
+  },
+
+  methods: {
+    edit() {
+      this.newName = this.name;
+      this.editing = true;
+    },
+
+    rename() {
+      if ( ! this.newName) { return; }
+      this.$gf.post({
+        type: 'GroupInfo',
+        name: this.newName,
+        groupid: this.groupid,
+        context: [this.groupid]
+      });
+      this.editing = false;
+    }
+  },
+
+  template: '#group'
+}
+
+const Channel = {
+  props: ['channelid', 'editable'],
+
+  setup(props) {
+    const $gf = Vue.inject('graffiti')
+    const channelid = Vue.toRef(props, 'channelid')
+    return $gf.useObjects([channelid])
+  },
+
+  computed: {
+    name() {
+      return this.objects
+        .filter(g => g.type === 'ChannelInfo' && g.channelid === this.channelid)
+        .sort((m1, m2)=> new Date(m2.published) - new Date(m1.published))
+        .at(0)?.name;
+    },
+
+    date() {
+      return this.objects
+        .filter(g => g.type === 'ChannelInfo' && g.channelid === this.channelid)
+        .sort((m1, m2)=> new Date(m2.published) - new Date(m1.published))
+        .at(0)?.date;
+    }
+  },
+
+  data() {
+    return {
+      newName: '',
+      newDate: undefined,
+      editing: false,
+    }
+  },
+
+  methods: {
+    edit() {
+      this.newName = this.name;
+      this.newDate = this.date;
+      this.editing = true;
+    },
+
+    rename() {
+      if ( ! this.newName) { return; }
+      this.$gf.post({
+        type: 'ChannelInfo',
+        name: this.newName,
+        date: this.newDate,
+        channelid: this.channelid,
+        context: [this.channelid]
+      });
+      this.editing = false;
+    }
+  },
+
+  template: '#channel'
+}
+
 Vue.createApp(app)
    .component('name', Name)
    .component('like', Like)
@@ -495,5 +680,7 @@ Vue.createApp(app)
    .component('profile-picture', ProfilePicture)
    .component('replies', Replies)
    .component('read-receipts', ReadReceipts)
+   .component('group', Group)
+   .component('channel', Channel)
    .use(GraffitiPlugin(Vue))
    .mount('#app')
