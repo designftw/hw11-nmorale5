@@ -58,6 +58,7 @@ const app = {
       actorsToUsernames: {},
       /////////////////////////////
       newMemberName: '',
+      popupSelection: '',
     }
   },
 
@@ -77,7 +78,13 @@ const app = {
           this.actorsToUsernames[m.bto[0]] = await this.resolver.actorToUsername(m.bto[0])
         }
       }
+      const messageList = document.getElementById('message-list');
+      if (messageList) { messageList.scrollTop = messageList.scrollHeight; }
     },
+
+    group(group) {
+      this.channel = undefined;
+    }
   },
   /////////////////////////////
 
@@ -216,7 +223,6 @@ const app = {
       if ( ! this.newMemberName || ! this.group) return;
       const actorid = await this.resolver.usernameToActor(this.newMemberName);
       if ( ! actorid) return;
-      console.log(actorid)
       this.$gf.post({
         type: 'Member',
         userid: actorid,
@@ -415,7 +421,7 @@ const MagnetImg = {
     }
   },
 
-  template: '<img :src="fetchedSrc" style="max-width: 8rem" />'
+  template: '<img :src="fetchedSrc" class="image"/>'
 }
 
 const ProfilePicture = {
@@ -581,7 +587,6 @@ const Group = {
 
   computed: {
     name() {
-      console.log(this.groupid)
       return this.objects
         .filter(g => g.type === 'GroupInfo' && g.groupid === this.groupid)
         .sort((m1, m2)=> new Date(m2.published) - new Date(m1.published))

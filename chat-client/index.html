@@ -3,215 +3,204 @@
 <html>
 <head>
   <script type="module" src="./chat.js"></script>
+  <link rel="stylesheet" href="./style.css">
+  <title>World's Greatest Chat App</title>
 </head>
 <body>
   <div id="app">
-    <h1>
-      My Cool Chat App
-    </h1>
-
-    <!-- Begin problem 3 solution -->
-    <h2>
-      Welcome {{myUsername}}
-    </h2>
-    <!-- End problem 3 solution -->
-
-    <p>
-      <button @click="$gf.toggleLogIn">
-        <!-- If we have a user ID, we're logged in so show "Log Out" -->
-        <!-- Otherwise, show "Log In" -->
-        {{ $gf.me? 'Log Out' : 'Log In' }}
-      </button>
-    </p>
-
+    
     <!-- If we're not logged in, hide everything except the login button -->
-    <template v-if="$gf.me">
+    <template v-if="!$gf.me">
+      <button @click="$gf.toggleLogIn">
+        Log In
+      </button>
+    </template>
 
-      <!-- Begin Problem 1 Solution -->
-      <p>
-        <form @submit.prevent="setUsername">
-          <input v-model="preferredUsername" placeholder="Choose a username..."/>
-          <input type="submit" value="Set Username"/>
-        </form>
-        {{ usernameResult }}
-      </p>
-      <!-- End Problem 1 Solution -->
+    <template v-else>
 
-      <p>
-        <!-- We display names in multiple places, so we made a -->
-        <!-- reusable <name></name> component. -->
-        <!-- See below for the template. -->
-        My Name Is: <name :actor="$gf.me" :editable="true"></name>
-        <br>
-        My Profile Picture Is: <profile-picture :actor="$gf.me" :editable="true"></profile-picture>
-      </p>
-
-      <!-- <p>
-        Change chat format:
-        <input type="radio" id="channel" :value="false" v-model="privateMessaging" />
-        <label for="channel">Channel-based public chat</label>
-
-        <input type="radio" id="pm" :value="true" v-model="privateMessaging" />
-        <label for="pm">Private Messaging</label>
-      </p> -->
-
-      <!-- <p v-if="!privateMessaging">
-        <label for="channel">
-          Change the channel you're chatting in:
-        </label>
-        <input id="channel" v-model="channel"/>
-      </p>
-      <div v-else>
-        <form @submit.prevent="chatWithUser">
-          <label for="recipient">
-            Type the user ID of who you'd like to chat with:
-          </label>
-          <input id="recipient" v-model="recipientUsernameSearch"/>
-          <input type="submit" value="Search"/>
-        </form>
-        <span v-if="recipient">
-          Chatting with {{ recipientUsername }}
-        </span>
-        <span v-else>
-          Username {{ recipientUsername }} does not exist!
-        </span>
-      </div> -->
-      
-      <h3>My Groups:</h3>
-      <ul>
-        <li v-for="g of groups" :key="g.id">
-          <label>
-            <input type="radio" name="groups" :value="g.groupid" v-model="group">
-            <group :groupid="g.groupid"></group>
-          </label>
-        </li>
-        <li>
-          <button @click="createGroup">Create new group</button>
-        </li>
-      </ul>
-
-      <template v-if="group">
-        <h3><group :groupid="group" :editable="true"></group></h3>
-
-        <h4>Members</h4>
-        <ul>
-          <li v-for="m of members" :key="m.id">
-            <name :actor="m.userid"></name>
-            <button @click="removeMember(m.userid)">X</button>
-          </li>
-          <li>
-            <form @submit.prevent="addMember">
-              <input v-model="newMemberName"/>
-              <input type="submit" value="Send"/>
+      <template v-if="popupSelection === 'profile'">
+        <div class="profile">
+          <!-- Begin problem 3 solution -->
+          <h2>
+            Welcome {{myUsername}}
+            <button @click="$gf.toggleLogIn">
+              Log Out
+            </button>
+          </h2>
+          <!-- End problem 3 solution -->
+          
+          <!-- Begin Problem 1 Solution -->
+          <p>
+            <form @submit.prevent="setUsername">
+              <input v-model="preferredUsername" placeholder="Choose a username..."/>
+              <input type="submit" value="Set Username"/>
             </form>
-          </li>
-        </ul>
+            {{ usernameResult }}
+          </p>
+          <!-- End Problem 1 Solution -->
 
-        <h4>Channels</h4>
-        <ul>
-          <li v-for="c of channels" :key="c.id">
-            <label>
-              <input type="radio" name="channels" :value="c.channelid" v-model="channel">
-              <channel :channelid="c.channelid"></channel>
-            </label>
-          </li>
-          <li>
-            <button @click="createChannel">Create new channel</button>
-          </li>
-        </ul>
+          <p>
+            <!-- We display names in multiple places, so we made a -->
+            <!-- reusable <name></name> component. -->
+            <!-- See below for the template. -->
+            My Name Is: <name :actor="$gf.me" :editable="true"></name>
+            <br>
+            My Profile Picture Is: <profile-picture :actor="$gf.me" :editable="true"></profile-picture>
+          </p>
+
+          <button @click="popupSelection=''">
+            ⬅️
+          </button>
+        </div>
       </template>
 
-      <template v-if="channel">
-        <h3><channel :channelid="channel" :editable="true"></channel></h3>
+      <template v-if="group && popupSelection === 'members'">
+        <div class="members">
+          <h3>Members</h3>
+          <ul>
+            <li v-for="m of members" :key="m.id">
+              <name :actor="m.userid"></name>
+              <button @click="removeMember(m.userid)">X</button>
+            </li>
+            <li>
+              <form @submit.prevent="addMember">
+                <input v-model="newMemberName"/>
+                <input type="submit" value="Send" placeholder="enter a username..."/>
+              </form>
+            </li>
+          </ul>
+          <button @click="popupSelection=''">
+            ⬅️
+          </button>
+        </div>
+      </template>
 
-        <!-- A form for sending messages -->
-        <form @submit.prevent="sendMessage">
-          <input v-model="messageText" placeholder="Type a message..."/>
-          <input type="file" accept="image/*" @change="onImageAttachment"/>
-          <input type="submit" value="Send"/>
-        </form>
+      <div class="wrapper">
+      
+        <div class="left-panel">
+          <h3>
+            <button @click="popupSelection = popupSelection === 'profile' ? '' : 'profile'">👤</button>
+            My Groups:
+          </h3>
+          <ul>
+            <li v-for="g of groups" :key="g.id">
+              <label>
+                <input type="radio" name="groups" :value="g.groupid" v-model="group">
+                <group :groupid="g.groupid"></group>
+              </label>
+            </li>
+            <li>
+              <button @click="createGroup">Create new group</button>
+            </li>
+          </ul>
+        </div>
 
-        <ul>
-          <!-- List all the messages -->
-          <li v-for="message of messages" :key="message.id">
+        <div class="middle-panel">
+          <template v-if="group">
+            <h3>
+              <button @click="popupSelection = popupSelection === 'members' ? '' : 'members'">👥</button>
+              <group :groupid="group" :editable="true"></group>
+            </h3>
 
-            <!-- Display and edit form if we're editing a message -->
-            <form v-if="editID==message.id" @submit.prevent="saveEditMessage(message)">
-              <input v-model="editText">
-              <input type="submit" value="Save"/>
-            </form>
-
-            <!-- Otherwise, display a bunch of properties from the message -->
-            <ul v-else>
-              <li>
-                Message: {{ message.content }} 
+            <h4>Channels</h4>
+            <ul>
+              <li v-for="c of channels" :key="c.id">
+                <label>
+                  <input type="radio" name="channels" :value="c.channelid" v-model="channel">
+                  <channel :channelid="c.channelid"></channel>
+                </label>
               </li>
               <li>
-                From Name: <name :actor="message.actor"></name>
-              </li>
-              <li>
-                Profile Picture: <profile-picture :actor="message.actor"></profile-picture>
-              </li>
-              <li>
-                From Actor ID: {{ message.actor }}
-              </li>
-              <li>
-                From Username: {{ actorsToUsernames[message.actor] }}
-              </li>
-              <!-- <template v-if="privateMessaging">
-                <li>
-                  To Name: <name :actor="message.bto[0]"></name>
-                </li>
-                <li>
-                  To Actor ID: {{ message.bto[0] }}
-                </li>
-                <li>
-                  To Username: {{ actorsToUsernames[message.bto[0]] }}
-                </li>
-              </template> -->
-              <li>
-                Published at Time: {{ message.published }}
-              </li>
-              <li>
-                Last Edited at Time: {{ message.updated }}
-              </li>
-              <li>
-                <!-- This is a unique identifier that can be used to "link" to messages -->
-                ID: {{ message.id }}
-              </li>
-
-              <li v-if="message.attachment && message.attachment.magnet">
-                <magnet-img :src="message.attachment.magnet"></magnet-img>
-              </li>
-
-              <!-- Only add these controls if the message is ours -->
-              <!-- You can't edit or delete other people's messages -->
-              <template v-if="message.actor==$gf.me">
-                <li>
-                  <button @click="removeMessage(message)">
-                    Delete Message
-                  </button>
-                </li>
-                <li>
-                  <button @click="startEditMessage(message)">
-                    Edit Message
-                  </button>
-                </li>
-              </template>
-
-              <li>
-                <like :messageid="message.id"></like>
-              </li>
-              <li>
-                <replies :messageid="message.id"></replies>
-              </li>
-              <li>
-                <read-receipts :messageid="message.id"></read-receipts>
+                <button @click="createChannel">Create new channel</button>
               </li>
             </ul>
           </template>
-        </li>
-      </li>
+        </div>
+
+        <div class="right-panel">
+          <h2 v-if="!channel">
+            {{ !groups ? "Welcome! Create a new chat group to get started." : (
+              !group ? "Please select a chat group, or create a new one!" : 
+              "Please select a channel to chat in, or create a new one!") }}
+          </h2>
+
+          <template v-else>
+            <h3>
+              <channel :channelid="channel" :editable="true"></channel>
+            </h3>
+
+            <div id="message-list">
+              <ul>
+                <!-- List all the messages -->
+                <li v-for="message of messages.slice().reverse()" :key="message.id">
+
+                  <!-- Display and edit form if we're editing a message -->
+                  <form v-if="editID==message.id" @submit.prevent="saveEditMessage(message)">
+                    <input v-model="editText">
+                    <input type="submit" value="Save"/>
+                  </form>
+
+                  <!-- Otherwise, display a bunch of properties from the message -->
+                  <ul class="message" v-else>
+                    <li class="message-header">
+                      <profile-picture :actor="message.actor"></profile-picture>
+                      <b><name :actor="message.actor"></name></b>
+                      <i>
+                        {{ (message.published === message.updated ? 
+                            `Published on ${message.published.slice(5, 10)} at ${message.published.slice(11, 16)}` : 
+                            `Edited on ${message.updated.slice(5, 10)} at ${message.updated.slice(11, 16)}`
+                            ).replace('-', '/') + 'UTC' }}
+                      </i>
+                    </li>
+                    <li>
+                      {{ message.content }}
+                      <!-- Only add these controls if the message is ours -->
+                      <!-- You can't edit or delete other people's messages -->
+                      <template v-if="message.actor==$gf.me">
+                        <button @click="startEditMessage(message)">
+                          ✏️
+                        </button>
+                        <button @click="removeMessage(message)">
+                          🗑️
+                        </button>
+                      </template>
+                    </li>
+                    <!-- <li>
+                      Published at Time: {{ message.published }}
+                    </li>
+                    <li>
+                      Last Edited at Time: {{ message.updated }}
+                    </li> -->
+
+                    <li v-if="message.attachment && message.attachment.magnet">
+                      <magnet-img :src="message.attachment.magnet"></magnet-img>
+                    </li>
+
+                    <li>
+                      <like :messageid="message.id"></like>
+                    </li>
+
+                    <li>
+                      <replies :messageid="message.id"></replies>
+                    </li>
+
+                    <li>
+                      <read-receipts :messageid="message.id"></read-receipts>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+
+            <!-- A form for sending messages -->
+            <form @submit.prevent="sendMessage">
+              <input id="send-message" v-model="messageText" placeholder="Type a message..." v-focus="true"/>
+              <input type="submit" value="Send"/>
+              <input type="file" accept="image/*" @change="onImageAttachment"/>
+            </form>
+          </template>
+        </div>
+      </div>
     </template>
   </div>
 
@@ -238,13 +227,12 @@
 
   <template id="like">
     <button @click="toggleLike">
-      {{ myLikes.length? 'Unlike' : 'Like' }}
+      {{ (myLikes.length? '❤️' : '🖤') + ' ' + numLikes }}
     </button>
-    # of likes:  {{ numLikes }}
   </template>
 
   <template id="profile-picture">
-    <magnet-img :src="profile?profile.icon.magnet:anonymous"></magnet-img>
+    <magnet-img :src="profile?profile.icon.magnet:anonymous" class="avatar"></magnet-img>
 
     <form v-if="editable" @submit.prevent="savePicture">
       Choose a profile Picture:
@@ -255,11 +243,11 @@
 
   <template id="replies">
     <form @submit.prevent="postReply">
-      <input v-model="content"/>
+      <input class="reply" v-model="content"/>
       <input type="submit" value="Reply"/>
     </form>
     <ul>
-      <li v-for="reply in replies" :key="reply.id">
+      <li v-for="reply in replies.slice().reverse()" :key="reply.id">
         <name :actor="reply.actor"></name>:
         {{ reply.content }}
       </li>
@@ -267,10 +255,12 @@
   </template>
 
   <template id="read-receipts">
-    Read By:
-    <span v-for="actor in readActors">
-      <name :actor="actor"></name>
-    </span>
+    <details>
+      <summary><i>Reads</i></summary>
+      <span v-for="actor in readActors">
+        <name :actor="actor"></name>;
+      </span>
+    </details>
   </template>
 
   <template id="group">
